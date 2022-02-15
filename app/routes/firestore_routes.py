@@ -31,7 +31,7 @@ firestore_bp = Blueprint('firestore', __name__, url_prefix="/firestore")
 
 # Get events from firestore
 @firestore_bp.route("", methods=["GET"])
-def get_firestore():
+def get_firestore_user_doc():
     request_body = request.get_json()
     url = request_body["url"]
     user = request_body["uid"]
@@ -40,35 +40,61 @@ def get_firestore():
 
     return make_response(res, 200)
 
-# Test post to firestore
-@firestore_bp.route("", methods=["PUT"])
-def post_to_users():
+# Get events next
+
+# Get events today
+@firestore_bp.route("events/today", methods=["GET"])
+def get_firestore_events_today():
     request_body = request.get_json()
     url = request_body["url"]
     user = request_body["uid"]
 
-    c = Calendar(requests.get(url).text)
+    doc = collection.document(user).collection('user_info').document('events')
+    res = doc.get().to_dict()
 
-    events_dict = {}
-    i = 1
-    for event in c.events:
-        start = str(event.begin)
-        end = str(event.end)
-        if not event.location:
-            location = "None"
-        else:
-            location = event.location
-        description = event.description
-        if ".com" in description:
-            location = "virtual"
-        events_dict[event.name] = [{"start_time": start},{"end_time": end},{"location":location},{"description":description}]
-        i += 1
+    # # times = []
+    # for event in res:
+    #     print(event)
+    # res["Event1"]
 
-    doc = collection.document(user)
-    res = doc.update(events_dict)
-    return make_response("posted", 200)
+    return make_response(res["Event1"][0], 200)
 
-@firestore_bp.route("events", methods=["PUT"])
+# Get events week
+
+
+# Post reminder preferences (called by setting reminder preferences) (returns dateInfo so Swift can set notifications)
+
+# Get reminders (may have time for this)
+
+# # Test post to firestore
+# @firestore_bp.route("", methods=["PUT"])
+# def post_to_users():
+#     request_body = request.get_json()
+#     url = request_body["url"]
+#     user = request_body["uid"]
+
+#     c = Calendar(requests.get(url).text)
+
+#     events_dict = {}
+#     i = 1
+#     for event in c.events:
+#         start = str(event.begin)
+#         end = str(event.end)
+#         if not event.location:
+#             location = "None"
+#         else:
+#             location = event.location
+#         description = event.description
+#         if ".com" in description:
+#             location = "virtual"
+#         events_dict[event.name] = [{"start_time": start},{"end_time": end},{"location":location},{"description":description}]
+#         i += 1
+
+#     doc = collection.document(user)
+#     res = doc.update(events_dict)
+#     return make_response("posted", 200)
+
+@firestore_bp.route("events", methods=["POST"])
 def post_to_subcollection():
     request_body = request.get_json()
     url = request_body["url"]
@@ -77,10 +103,18 @@ def post_to_subcollection():
     c = Calendar(requests.get(url).text)
 
     events_dict = {}
-    i = 1
+
     for event in c.events:
         start = str(event.begin)
         end = str(event.end)
+        event_date = start[0:10]
+        event_time = start[11:]
+
+        event_day = start[8:10]
+        event_month = start[5:7]
+        event_year = start[0:4]
+        event_hour = start[11:13]
+        event_minute = start[14:16]
         if not event.location:
             location = "None"
         else:
@@ -88,8 +122,7 @@ def post_to_subcollection():
         description = event.description
         if ".com" in description:
             location = "virtual"
-        events_dict[event.name] = [{"start_time": start},{"end_time": end},{"location":location},{"description":description}]
-        i += 1
+        events_dict[event.name] = [{"day": event_day},{"month": event_month},{"year":event_year},{"hour":event_hour},{"minute":event_minute},{"start_time": start},{"end_time": end},{"location":location},{"description":description}]
 
     doc = collection.document(user).collection('user_info').document('events')
     res = doc.set(events_dict)
