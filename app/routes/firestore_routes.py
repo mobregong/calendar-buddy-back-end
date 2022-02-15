@@ -44,8 +44,12 @@ def get_firestore_user_doc():
 # Get events next (work on this after reminders)
 
 # Get events today
-@firestore_bp.route("events/today", methods=["GET"])
-def get_firestore_events_today():
+# @firestore_bp.route("events/today", methods=["GET"])
+# done in swift
+
+# Post events today
+@firestore_bp.route("events/today", methods=["POST"])
+def post_firestore_events_today():
     request_body = request.get_json()
 
     user = request_body["uid"]
@@ -61,9 +65,10 @@ def get_firestore_events_today():
     date_now = str(now_with_micro_sec.date())
     time_now = date_time_now[11:]
 
+    doc = collection.document(user).collection('user_info').document('events').collection('events_today')
 
-    today_dict = {}
     for event in c.events: 
+        # today_dict = {}
         event_name = event.name
         start = str(event.begin)
         end = str(event.end)
@@ -78,10 +83,19 @@ def get_firestore_events_today():
             location = "virtual"
 
         if event_date == date_now:
-            today_dict[event.name] = [{"start_time": event_date},{"event_time": event_time},{"location":location},{"description":description}]
+            data = {
+                "event_name": event_name,
+                "start_time": event_date,
+                "event_time": event_time,
+                "location":location,
+                "description":description
+                }
+            doc.document(event_name).set(data)
 
-    response = today_dict
-    return make_response(response, 200)
+    # response = today_dict
+    return make_response("posted", 200)
+    # return make_response(response, 200)
+
     # return make_response(res["Event1"][0], 200)
 
 # Get events week (may have time for this)
@@ -131,6 +145,7 @@ def post_to_subcollection():
     events_dict = {}
 
     for event in c.events:
+        event_name = event.name
         start = str(event.begin)
         end = str(event.end)
         event_date = start[0:10]
@@ -148,9 +163,17 @@ def post_to_subcollection():
         description = event.description
         if ".com" in description:
             location = "virtual"
-        events_dict[event.name] = [{"day": event_day},{"month": event_month},{"year":event_year},{"hour":event_hour},{"minute":event_minute},{"start_time": start},{"end_time": end},{"location":location},{"description":description}]
-        doc = collection.document(user).collection('user_info').document(event.name)
-        doc.set(events_dict)
+        data = {
+                "day": event_day,
+                "month": event_month,
+                "year": event_year,
+                "hour": event_hour,
+                "minute": event_minute,
+                "location": location,
+                "description": description
+                }
+
+        collection.document(user).collection('user_info').document(event_name).set(data)
 
     # doc = collection.document(user).collection('user_info').document('events')
     # doc.set(events_dict)
