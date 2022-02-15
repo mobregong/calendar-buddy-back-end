@@ -4,6 +4,7 @@ from app import db
 from ics import Calendar, Event
 from flask import Blueprint, request, jsonify, make_response, abort
 import requests
+from datetime import datetime, timedelta, timezone, date, time
 
 # url = https://calendar.google.com/calendar/ical/v2u22eu9fu46ia671hf2lns0m8%40group.calendar.google.com/private-019bf05ca8425d86706d4dca2909a891/basic.ics"
 # c = Calendar(requests.get(url).text)
@@ -29,7 +30,7 @@ firestore_bp = Blueprint('firestore', __name__, url_prefix="/firestore")
 #     return make_response(calendar, 200)
 
 
-# Get events from firestore
+# Get user_info from firestore
 @firestore_bp.route("", methods=["GET"])
 def get_firestore_user_doc():
     request_body = request.get_json()
@@ -40,27 +41,50 @@ def get_firestore_user_doc():
 
     return make_response(res, 200)
 
-# Get events next
+# Get events next (work on this after reminders)
 
 # Get events today
 @firestore_bp.route("events/today", methods=["GET"])
 def get_firestore_events_today():
     request_body = request.get_json()
-    url = request_body["url"]
+
     user = request_body["uid"]
+    url = collection.document(user).get().to_dict()["url"]
 
-    doc = collection.document(user).collection('user_info').document('events')
-    res = doc.get().to_dict()
+    c = Calendar(requests.get(url).text)
 
-    # # times = []
-    # for event in res:
-    #     print(event)
-    # res["Event1"]
+    # doc = collection.document(user).collection('user_info').document('events')
+    # res = doc.get().to_dict()
 
-    return make_response(res["Event1"][0], 200)
+    now_with_micro_sec = datetime.now(timezone.utc)
+    date_time_now = now_with_micro_sec.isoformat(" ", "seconds")
+    date_now = str(now_with_micro_sec.date())
+    time_now = date_time_now[11:]
 
-# Get events week
 
+    today_dict = {}
+    for event in c.events: 
+        event_name = event.name
+        start = str(event.begin)
+        end = str(event.end)
+        event_date = start[0:10]
+        event_time = start[11:16]
+        if not event.location:
+            location = "None"
+        else:
+            location = event.location
+        description = event.description
+        if ".com" in description:
+            location = "virtual"
+
+        if event_date == date_now:
+            today_dict[event.name] = [{"start_time": event_date},{"event_time": event_time},{"location":location},{"description":description}]
+
+    response = today_dict
+    return make_response(response, 200)
+    # return make_response(res["Event1"][0], 200)
+
+# Get events week (may have time for this)
 
 # Post reminder preferences (called by setting reminder preferences) (returns dateInfo so Swift can set notifications)
 
@@ -94,11 +118,13 @@ def get_firestore_events_today():
 #     res = doc.update(events_dict)
 #     return make_response("posted", 200)
 
+# Posts events from calendar onto events doc and url into user <uid> doc
 @firestore_bp.route("events", methods=["POST"])
 def post_to_subcollection():
     request_body = request.get_json()
     url = request_body["url"]
     user = request_body["uid"]
+    address = {'url': url}
 
     c = Calendar(requests.get(url).text)
 
@@ -123,7 +149,10 @@ def post_to_subcollection():
         if ".com" in description:
             location = "virtual"
         events_dict[event.name] = [{"day": event_day},{"month": event_month},{"year":event_year},{"hour":event_hour},{"minute":event_minute},{"start_time": start},{"end_time": end},{"location":location},{"description":description}]
+        doc = collection.document(user).collection('user_info').document(event.name)
+        doc.set(events_dict)
 
-    doc = collection.document(user).collection('user_info').document('events')
-    res = doc.set(events_dict)
+    # doc = collection.document(user).collection('user_info').document('events')
+    # doc.set(events_dict)
+    collection.document(user).update(address)
     return make_response("posted", 200)
