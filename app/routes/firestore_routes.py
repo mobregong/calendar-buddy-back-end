@@ -5,6 +5,7 @@ from ics import Calendar, Event
 from flask import Blueprint, request, jsonify, make_response, abort
 import requests
 from datetime import datetime, timedelta, timezone, date, time
+from dateutil import parser
 
 # url = https://calendar.google.com/calendar/ical/v2u22eu9fu46ia671hf2lns0m8%40group.calendar.google.com/private-019bf05ca8425d86706d4dca2909a891/basic.ics"
 # c = Calendar(requests.get(url).text)
@@ -57,21 +58,17 @@ def post_firestore_events_today():
 
     c = Calendar(requests.get(url).text)
 
-    # doc = collection.document(user).collection('user_info').document('events')
-    # res = doc.get().to_dict()
-
     now_with_micro_sec = datetime.now(timezone.utc)
-    date_time_now = now_with_micro_sec.isoformat(" ", "seconds")
+    # date_time_now = now_with_micro_sec.isoformat(" ", "seconds")
     date_now = str(now_with_micro_sec.date())
-    time_now = date_time_now[11:]
+    # time_now = date_time_now[11:]
 
     doc = collection.document(user).collection('user_info').document('events').collection('events_today')
 
     for event in c.events: 
-        # today_dict = {}
         event_name = event.name
         start = str(event.begin)
-        end = str(event.end)
+        # end = str(event.end)
         event_date = start[0:10]
         event_time = start[11:16]
         if not event.location:
@@ -94,43 +91,74 @@ def post_firestore_events_today():
 
     # response = today_dict
     return make_response("posted", 200)
-    # return make_response(response, 200)
-
-    # return make_response(res["Event1"][0], 200)
 
 # Get events week (may have time for this)
 
 # Post reminder preferences (called by setting reminder preferences) (returns dateInfo so Swift can set notifications)
+@firestore_bp.route("reminders/preferences", methods=["POST"])
+def post_reminder_preferences():
+    # get uid from body
+    request_body = request.get_json()
+    user = request_body["uid"]
+
+    # get url from firebase
+    url = collection.document(user).get().to_dict()["url"]
+    c = Calendar(requests.get(url).text)
+
+    # save preferences
+    every = int(request_body["every"])
+    freq = int(request_body["freq"])
+    # total = every * freq
+
+    # get non-edited events and edit events with preferences  
+    doc = collection.document(user).collection('user_info').document('events').collection('reminders')
+
+    for event in c.events:
+        # print(f'{doc.id} => {doc.to_dict()}')
+        event_name = event.name
+        start = str(event.begin)
+        event_date = start[0:10]
+        event_time = start[11:19]
+        if not event.location:
+            location = "None"
+        else:
+            location = event.location
+        description = event.description
+        if ".com" in description:
+            location = "virtual"
+        str_date_time = event_date + " " + event_time
+        date_time = parser.parse(str_date_time)
+
+        # i = 0
+        for i in range(0,freq):
+            time_change = timedelta(minutes=every)
+            reminder = date_time - time_change
+            # reminder_date = str(reminder)[0:10]
+            reminder_name = f"{event_name}_Reminder{i+1}"
+            reminder_day = str(reminder)[8:10]
+            reminder_month = str(reminder)[5:7]
+            reminder_year = str(reminder)[0:4]
+            reminder_hour = str(reminder)[11:13]
+            reminder_minute = str(reminder)[14:16]
+
+            data = {
+                "day": reminder_day,
+                "month": reminder_month,
+                "year": reminder_year,
+                "hour": reminder_hour,
+                "minute": reminder_minute,
+                "event_name": event_name,
+                "event_date": event_date,
+                "event_time": event_time,
+                "location": location,
+                "description": description
+                }
+            # save reminders
+            doc.document(reminder_name).set(data)
+
+    return make_response("posted", 200)
 
 # Get reminders (may have time for this)
-
-# # Test post to firestore
-# @firestore_bp.route("", methods=["PUT"])
-# def post_to_users():
-#     request_body = request.get_json()
-#     url = request_body["url"]
-#     user = request_body["uid"]
-
-#     c = Calendar(requests.get(url).text)
-
-#     events_dict = {}
-#     i = 1
-#     for event in c.events:
-#         start = str(event.begin)
-#         end = str(event.end)
-#         if not event.location:
-#             location = "None"
-#         else:
-#             location = event.location
-#         description = event.description
-#         if ".com" in description:
-#             location = "virtual"
-#         events_dict[event.name] = [{"start_time": start},{"end_time": end},{"location":location},{"description":description}]
-#         i += 1
-
-#     doc = collection.document(user)
-#     res = doc.update(events_dict)
-#     return make_response("posted", 200)
 
 # Posts events from calendar onto events doc and url into user <uid> doc
 @firestore_bp.route("events", methods=["POST"])
